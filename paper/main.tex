@@ -1,0 +1,324 @@
+\documentclass{ieeeaccess}
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{xcolor}
+\usepackage{url}
+\makeatletter\g@addto@macro{\UrlBreaks}{\do\-}\makeatother
+\input{numbers}
+\newcommand{\TODO}[1]{\textcolor{red}{[#1]}}
+
+\begin{document}
+\history{Date of publication xxxx 00, 0000, date of current version xxxx 00, 0000.}
+\doi{10.1109/ACCESS.2017.DOI}
+
+\title{Do Prompt-Injection Detectors Look at the Injection? A Localization-Faithful Explainability Audit of Agent Guardrails}
+
+\author{\uppercase{Yulliwas Ameur}\authorrefmark{1,2} and \uppercase{Samia Bouzefrane}\authorrefmark{2}}
+\address[1]{Efrei Research Lab, Efrei Paris, Universit\'e Paris-Panth\'eon-Assas, 94800 Villejuif, France}
+\address[2]{CEDRIC Laboratory, Conservatoire National des Arts et M\'etiers (Cnam), 75003 Paris, France}
+\tfootnote{This work did not receive any specific funding.}
+
+\markboth
+{Y. Ameur, S. Bouzefrane: Do Prompt-Injection Detectors Look at the Injection?}
+{Y. Ameur, S. Bouzefrane: Do Prompt-Injection Detectors Look at the Injection?}
+
+\corresp{Corresponding author: Yulliwas Ameur (e-mail: yulliwas.ameur@efrei.fr).}
+
+\begin{abstract}
+Classifier-based guardrails are placed in front of large language model agents to flag prompt injections hidden in tool outputs and retrieved documents, and explainable artificial intelligence is increasingly proposed to justify their verdicts. Recent work localizes injected text inside contaminated inputs or agent contexts, but does not check whether the explanations a guardrail gives for its own verdict point at the injection. This paper audits that question. We build PI-Loc, a span-annotated benchmark of 820 documents in which public injection payloads are spliced at known character offsets into benign encyclopedic passages and e-mails, together with hard negatives and clean carriers. We audit three widely used open detectors with four explainers (occlusion, KernelSHAP, attention, and gradient times input) along two axes, localization against the ground-truth span and faithfulness to the verdict, with bootstrap confidence intervals and paired tests. Detection degrades sharply once the injection is embedded: at a 5\% false-positive rate the best detector recalls \PaTprCalPct\% of embedded injections and the other two recall \DsTprCalPct\% and \FmTprCalPct\%. On the discriminating detector, attention gives the best span overlap while occlusion best pinpoints the injection (its top word lies in the span \PaOccPgPct\% of the time, against \PaAttnPgPct\% for attention), and both are faithful. On saturated detectors, above-chance localization is an artifact. An explanation-guided sanitization lowers the mean injection probability from \SanAttnTwentyPb{} to \SanAttnTwentyPa{} while deleting \SanAttnTwentyCoPct\% of benign words. We recommend reporting embedded recall, localization and faithfulness next to accuracy, and we release the benchmark and the audit code.
+\end{abstract}
+
+\begin{keywords}
+Explainable artificial intelligence, faithfulness, guardrails, large language model agents, prompt injection.
+\end{keywords}
+
+\titlepgskip=-15pt
+
+\maketitle
+
+\section{Introduction}
+\label{sec:intro}
+\PARstart{L}{arge} language model (LLM) agents act on content they did not write. A triage agent in a security operations centre reads alerts and logs; a mail assistant reads incoming messages; a retrieval-augmented assistant reads fetched web pages. Any of these inputs can carry an \emph{indirect prompt injection}: instructions, planted by a third party, that the model may follow as if they came from its principal \cite{greshake2023,owaspllm}. Because the injected text arrives through a tool, the user never sees it, and the agent has no native notion of which span of its context is trusted.
+
+The mitigation deployed today is a \emph{classifier-based guardrail}: a text classifier placed before the agent that labels an input \textsc{injection} or \textsc{safe} \cite{protectai2024,promptguard2024}. These detectors are cheap, model-agnostic, and report high ROC-AUC on public benchmarks of \emph{standalone} prompts. As they move into security-critical pipelines, a second requirement appears: their verdicts must be \emph{explainable}, so an analyst can see \emph{why} a document was blocked. This is the motivation of explainable AI (XAI) for trustworthy cybersecurity.
+
+We argue that two checks are missing before such a guardrail can be trusted, and that both require the injection to be evaluated \emph{inside} a realistic document, with its \emph{ground-truth location} known.
+
+The first check is \emph{operational}: a benchmark of standalone injection prompts measures whether a model can tell an injection-shaped sentence from an ordinary one, not whether it can find an injection hidden in a page of benign text. The agentic threat is the latter. We find the gap is large.
+
+The second check is \emph{explanatory}: an explanation that highlights the trigger phrase ``ignore previous instructions'' is useful; one that highlights an incidental word correlated with the positive class is a liability, because it gives the analyst false confidence and tells an attacker what to edit. Measuring this needs the ground-truth span.
+
+Span-level ground truth for injections is not new in itself. PromptLocate \cite{promptlocate2026} recovers the injected instruction and data inside a contaminated input, and AttnLocate \cite{attnlocate2026} marks the context spans that drive an agent's tool call. Both treat localization as the \emph{task} to be solved. We use ground-truth spans for a different purpose: as a reference against which to \emph{audit the explanations of the guardrail classifiers} that are deployed today, and to test whether those explanations are faithful to the verdict.
+
+\paragraph*{Contributions}
+\begin{enumerate}
+\item \textbf{\textsc{PI-Loc}, a span-annotated benchmark for auditing guardrails.} We splice injection payloads, taken verbatim from public corpora \cite{deepsetpi,safeguardpi}, at known character offsets into benign carriers (SQuAD passages \cite{squad} and AESLC e-mails \cite{aeslc}). This yields 520 indirect-injection inputs (all 520 payload strings pairwise distinct) with exact span labels, plus 180 hard negatives that contain trigger words but no instruction, and 120 clean carriers (Section~\ref{sec:bench}).
+\item \textbf{The embedded-setting recall gap.} We show that popular guardrails either miss about half of embedded injections or flag every document, and that a calibrated threshold does not rescue the latter (Section~\ref{sec:results}).
+\item \textbf{A two-axis explanation audit with statistics.} We evaluate four explainers on a matched item set along \emph{localization} (AUPRC, Precision@$|{\rm span}|$, pointing game) and \emph{faithfulness} (comprehensiveness, retained probability), with bootstrap CIs and paired Wilcoxon tests, and show that these are distinct axes on which different methods win (Section~\ref{sec:results}).
+\item \textbf{A measured sanitization experiment.} We remove the top-ranked words and \emph{re-query the detector}, reporting the resulting injection-probability drop, the fraction of the injected span removed, and the benign collateral, and we tie the same signal to the editable shortcut an attacker exploits (Section~\ref{sec:dualuse}).
+\end{enumerate}
+The benchmark builder, the audit code, the raw per-item results, and the scripts that produce every number and figure of this paper are released (see the Data and Code Availability section).
+
+Section~\ref{sec:related} positions this audit against the localization methods above and against a concurrent study of guardrail saliency, \emph{Decoding Guardrails} \cite{decodingguardrails}.
+
+\section{Background and Related Work}
+\label{sec:related}
+
+\paragraph*{Prompt injection against LLM agents}
+Greshake et al.\ \cite{greshake2023} introduced indirect prompt injection, where the adversarial instruction is delivered through retrieved or tool-returned content. The OWASP Top~10 for LLM applications lists prompt injection as the primary risk \cite{owaspllm}. Benchmarks such as OpenPromptInjection \cite{openpi2024} and AgentDojo \cite{agentdojo2024} evaluate attacks and defenses end to end. Labelled corpora released by deepset \cite{deepsetpi} and safe-guard \cite{safeguardpi} provide injection and benign \emph{prompts}; we reuse their positive examples as payloads but change the \emph{task}: the detector must find an injection \emph{inside} a longer benign document.
+
+\paragraph*{Classifier guardrails}
+Lightweight DeBERTa- and DistilBERT-based detectors \cite{protectai2024,deepsetpi,fmops} and Meta's Prompt~Guard family \cite{promptguard2024} are widely deployed. Their published evaluation is almost exclusively accuracy-oriented (ROC-AUC, F1 on held-out prompts), in the standalone setting. Detection methods with stronger guarantees, such as DataSentinel \cite{datasentinel2025}, are also evaluated on detection accuracy rather than on the evidence behind each verdict.
+
+\paragraph*{Localizing injected instructions}
+PromptLocate \cite{promptlocate2026} localizes the injected instruction and the injected data inside a contaminated input, for forensic analysis and data recovery. It segments the input, uses a prompt-injection detector (a tailored DataSentinel \cite{datasentinel2025}) as an oracle in a group-based binary search to find instruction-contaminated segments, and evaluates span recovery on OpenPromptInjection and on tool outputs from AgentDojo. AttnLocate \cite{attnlocate2026} works inside the agent: it aggregates the agent LLM's multi-head, multi-layer attention into features, trains a detector that marks the context spans driving a tool call, and judges the call by the trust level of those spans. These works show that span-level ground truth for injections is attainable and useful. Neither asks whether the explanation a \emph{guardrail classifier} gives for its own verdict points at the injection, nor whether that explanation is faithful; this is the question we audit. The two lines are connected. PromptLocate's oracle search relies on how the detector's verdict changes when segments are kept or removed, a black-box ablation close in spirit to occlusion. Our results (Section~\ref{sec:results}) indicate that such ablation evidence is informative on a discriminating detector but uninformative on a saturated one, where removing words does not move the verdict. Context-traceback methods for long-context LLMs \cite{tracllm2025,attntrace2025} attribute an \emph{output} to source passages; like AttnLocate, they explain the model after the injection has reached it, not the guardrail that is supposed to stop it.
+
+\paragraph*{XAI and its evaluation in security}
+Post-hoc attribution methods, namely occlusion \cite{zeiler2014}, LIME \cite{lime2016}, SHAP \cite{shap2017}, gradient-based saliency \cite{sundararajan2017}, and attention-based explanations \cite{attention2017}, are routinely applied to security classifiers. Warnecke et al.\ \cite{warnecke2020} showed that these methods must be judged by \emph{faithfulness} (do highlighted features drive the decision?) rather than by eye; the comprehensiveness metric we use was standardized in ERASER \cite{deyoung2020}. Faithfulness does not imply \emph{localization}: an explanation can be faithful to a shortcut. We measure both, against ground-truth spans.
+
+\paragraph*{Explanation-guided evasion}
+That explanations lower the cost of evasion is known for malware \cite{warnecke2020} and, concurrently with our work, for one prompt-injection guardrail \cite{decodingguardrails}. Outeda et al.\ \cite{decodingguardrails} study a single guardrail (Meta Prompt~Guard~2, which is \emph{not} among our three detectors) with gradient and SHAP saliency, and use saliency to \emph{evade} it. We treat the \emph{same} importance signal as a measurable quantity with a defensive use (sanitization, which we run) and an offensive use (shortcut editing), and tie both to how well the explanation localizes the ground-truth injection and to whether the detector is faithful at all.
+
+\paragraph*{Positioning}
+Table~\ref{tab:compare} summarizes the differences with the three closest works. Their results and ours are complementary: localization methods show that injected spans can be recovered, \emph{Decoding Guardrails} shows that one guardrail relies on diffuse token evidence, and we show that popular detectors under-recall or over-flag when the injection is embedded, and that the quality of their explanations depends on both the explainer and the detector.
+
+\begin{table*}[t]
+\centering
+\caption{This work compared with the closest related studies.}
+\label{tab:compare}
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}p{3.1cm}p{3.1cm}p{3.1cm}p{3.1cm}p{3.6cm}@{}}
+\toprule
+Dimension & \emph{Decoding Guardrails} \cite{decodingguardrails} & PromptLocate \cite{promptlocate2026} & AttnLocate \cite{attnlocate2026} & This work\\
+\midrule
+What is explained or located & guardrail verdict & injected text in an input & spans driving a tool call & guardrail verdict\\
+Ground-truth injection span & no & yes & yes & yes (\textsc{PI-Loc})\\
+Setting & standalone prompts & contaminated inputs, tool outputs & agent context & injections embedded in benign documents\\
+Guardrail classifiers audited & 1 (Prompt~Guard~2) & detector used as an oracle & --- & 3 (none shared)\\
+Explainers compared & 2 (gradient, SHAP) & attribution baselines & attribution baselines & 4 (occlusion, SHAP, attention, gradient)\\
+Faithfulness of the explanation & not measured & not studied & not studied & comprehensiveness, retained probability\\
+Use of the signal & evasion (run) & forensics, data recovery & tool-call adjudication & sanitization (run), evasion (discussed)\\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+\section{The \textsc{PI-Loc} Benchmark}
+\label{sec:bench}
+
+\paragraph*{Design}
+\textsc{PI-Loc} models the \emph{indirect} setting: the detector sees a document (a tool output), most of which is benign, with an injected instruction somewhere inside. Each item is built by (1) sampling a benign \emph{carrier}, (2) choosing a sentence boundary uniformly at random, and (3) inserting a string there, recording its character span $[\,s,e)$.
+
+\paragraph*{Carriers}
+Two carrier families test distribution sensitivity: encyclopedic passages from the SQuAD~v1.1 training split \cite{squad} (``wiki''), and e-mail bodies from the AESLC training split \cite{aeslc} (``email''). Carriers have 70--180 words and contain no word of a fixed trigger lexicon (e.g., \emph{ignore}, \emph{previous}, \emph{instructions}, \emph{rules}, \emph{prompt}); items alternate between the two families, and no carrier is used twice.
+
+\paragraph*{Payloads}
+To keep every attack string a citable public artifact rather than a newly authored one, payloads are drawn \emph{verbatim} from the positive (injection) rows of the deepset \cite{deepsetpi} and safe-guard \cite{safeguardpi} corpora, keeping English strings of 5--55 words (language identified automatically). The two corpora yield $\NPos$ distinct positive strings, from which the 520 injections draw 520 pairwise-distinct payloads.
+
+\paragraph*{Hard negatives and clean carriers}
+A hard negative is a carrier with an inserted benign sentence of 8--40 words that contains trigger lexicon. These sentences are encyclopedic statements taken from SQuAD passages that contain a trigger word (for example, a sentence about ``the previous three seasons''); such passages are never used as carriers. Hard negatives separate ``detecting the \emph{word} \emph{previous}'' from ``detecting an \emph{instruction}''. Clean carriers are left unchanged.
+
+\paragraph*{Classes and release}
+\textsc{PI-Loc} has 820 items: 520 injections (label 1, with spans), 180 hard negatives and 120 clean carriers (label 0). The builder is seeded and pins every dataset to an exact revision; it reproduces the benchmark file byte for byte, which the released tests check with a SHA-256 digest.
+
+\section{Audit Methodology}
+\label{sec:method}
+
+\paragraph*{Detectors}
+We audit three open, widely downloaded classifier guardrails, pinned to exact model revisions: \url{protectai/deberta-v3-base-prompt-injection-v2} \cite{protectai2024}, \url{deepset/deberta-v3-base-injection} \cite{deepsetpi}, and \url{fmops/distilbert-prompt-injection} \cite{fmops}. Each returns $P(\textsc{injection}\mid x)$; inputs are truncated at 512 tokens, which no PI-Loc document reaches.
+
+\paragraph*{Explainers}
+Every explainer produces a word-level importance vector over the whitespace-separated words of the document. Two are \emph{black-box}. \emph{Occlusion}: the importance of word $w_i$ is the drop in $P(\textsc{injection})$ when $w_i$ is removed \cite{zeiler2014}. \emph{KernelSHAP}: random word coalitions, weighted with the SHAP kernel and fitted with weighted ridge regression \cite{shap2017} (96 coalitions on the anchor detector, 48 on the others). Two are \emph{white-box}. \emph{Attention}: mean over heads of the last-layer attention from the first position to each token, max-pooled to words \cite{attention2017}. \emph{Gradient$\times$input}: the absolute value of the dot product between the input embedding and the gradient of $P(\textsc{injection})$ with respect to it, max-pooled to words \cite{sundararajan2017}.
+
+\paragraph*{Matched item set}
+Localization is defined only on true positives. We therefore fix one evaluation set, a seeded sample of $50$ of the $\NCaught$ injections caught by the strongest detector (\texttt{protectai}), and score \emph{all three} detectors on the same items, so that cross-detector cells are comparable (Appendix).
+
+\paragraph*{Localization metrics}
+For each item we compare the word-importance vector to the binary in-span word mask: \emph{AUPRC} (ranking words by importance), \emph{Precision@$|{\rm span}|$} (fraction of the top-$|{\rm span}|$ words in-span), and the \emph{pointing game} (is the single most important word in-span?) \cite{pointing2018}. The chance AUPRC is the mean fraction of in-span words over the evaluated items, $\PaChance$.
+
+\paragraph*{Faithfulness metrics}
+\emph{Comprehensiveness} is the drop in $P(\textsc{injection})$ when the top-$20\%$ words are removed (ERASER \cite{deyoung2020}; higher is better). We also report the \emph{retained probability} when only the top-$20\%$ words are kept (a sufficiency proxy; higher means the top words alone suffice).
+
+\paragraph*{Statistics}
+We report $95\%$ bootstrap confidence intervals ($5000$ resamples) for AUPRC and comprehensiveness, Wilson intervals for the pointing game, and paired Wilcoxon signed-rank tests between explainers. Experiments run on CPU with a fixed seed; re-running them in a fresh process reproduces every per-item metric exactly.
+
+\section{Results}
+\label{sec:results}
+
+\subsection{Detection Collapses in the Embedded Setting}
+
+Table~\ref{tab:detect} and Fig.~\ref{fig:detection} report detection on \textsc{PI-Loc}. The three detectors fail in two different ways. \texttt{protectai-deberta-v2} ranks documents well (ROC-AUC $\PaAuc$) and never false-alarms on hard negatives or clean carriers at its default $0.5$ threshold, yet it \emph{recalls only $\PaTprPct\%$} of the embedded injections: a classifier tuned on standalone prompts misses more than half of the same payloads once they sit inside a benign page. \texttt{deepset-deberta} and \texttt{fmops-distilbert} do the opposite: at the default threshold they label almost \emph{every} document an injection, including all hard negatives. Their scores still carry some ranking information (ROC-AUC $\DsAuc$ and $\FmAuc$), so we also report recall at a \emph{calibrated} operating point, TPR at FPR${\le}0.05$, with the threshold set on the negatives (last column of Table~\ref{tab:detect}). It is $\PaTprCal$ for protectai but only $\DsTprCal$ and $\FmTprCal$ for deepset and fmops. Even with a usable false-alarm budget, these two detectors therefore miss about three embedded injections out of four; the failure is not merely a wrong threshold. Only one of three popular guardrails is a usable discriminator in the agentic setting, and even it misses $\PaMissCalPct\%$ of embedded injections at that budget.
+
+\begin{table}[t]
+\centering
+\caption{Detection on \textsc{PI-Loc}. Columns 2--5 use the default $0.5$ threshold (TPR on embedded injections; FPR on hard negatives and clean carriers). The last column is recall at a threshold calibrated so that at most $5\%$ of negatives are flagged.}
+\label{tab:detect}
+\setlength{\tabcolsep}{2pt}
+\begin{tabular}{@{}lccccc@{}}
+\toprule
+Detector & ROC-AUC & TPR$_{\textsc{inj}}$ & FPR$_{\textsc{hn}}$ & FPR$_{\textsc{clean}}$ & TPR@FPR$_{.05}$\\
+\midrule
+protectai-deberta-v2 & \PaAuc & \PaTpr & \PaFprHn & \PaFprCl & \textbf{\PaTprCal}\\
+deepset-deberta      & \DsAuc & \DsTpr & \DsFprHn & \DsFprCl & \DsTprCal\\
+fmops-distilbert     & \FmAuc & \FmTpr & \FmFprHn & \FmFprCl & \FmTprCal\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\Figure[t!](topskip=0pt, botskip=0pt, midskip=0pt)[width=0.98\columnwidth]{fig_detection.pdf}
+{Detection rates on \textsc{PI-Loc} (values of Table~\ref{tab:detect}). High ROC-AUC hides the embedded-setting behavior: low recall (protectai) or indiscriminate flagging (deepset, fmops) at the default threshold.\label{fig:detection}}
+
+\subsection{Localization: Above Chance, but Method-Dependent}
+
+Table~\ref{tab:loc} and Fig.~\ref{fig:loc} report localization for the one detector that actually discriminates, \texttt{protectai-deberta-v2}; localization on a detector that flags everything is not meaningful (Section~\ref{sec:disc} and Appendix). Every explainer beats the chance AUPRC of $\PaChance$, so the detector \emph{does} place weight inside the injected span. But the methods disagree on \emph{which} notion of localization they satisfy. \emph{Attention} has the best span \emph{overlap} (AUPRC $\PaAttnAu$, CI $[\PaAttnAuLo,\PaAttnAuHi]$; Precision@$|{\rm span}|$ $\PaAttnPs$): its mass is spread across the span. \emph{Occlusion} has lower overlap (AUPRC $\PaOccAu$, CI $[\PaOccAuLo,\PaOccAuHi]$) but by far the best \emph{pinpointing}: its single most important word lands inside the injection $\PaOccPgPct\%$ of the time (Wilson CI $[\PaOccPgLo,\PaOccPgHi]$), against $\PaAttnPgPct\%$ for attention. Both contrasts are significant (paired Wilcoxon, AUPRC $p\PAuOccAttn$, pointing $p\PPoOccAttn$). Which method to prefer therefore depends on the downstream use: highlighting a region for an analyst (favor attention) or selecting the exact tokens to remove (favor occlusion). KernelSHAP and gradient$\times$input trail on both notions; with our coalition budget, KernelSHAP is barely above chance.
+
+\begin{table}[t]
+\centering
+\caption{Localization against ground-truth spans on \texttt{protectai-deberta-v2} ($n=50$ matched true-positive injections; $95\%$ CI). Chance AUPRC $=\PaChance$.}
+\label{tab:loc}
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{@{}lccc@{}}
+\toprule
+Explainer & AUPRC (CI) & P@$|{\rm span}|$ & Pointing game (CI)\\
+\midrule
+Occlusion        & \PaOccAu{} [\PaOccAuLo,\PaOccAuHi] & \PaOccPs & \textbf{\PaOccPg} [\PaOccPgLo,\PaOccPgHi]\\
+KernelSHAP       & \PaShapAu{} [\PaShapAuLo,\PaShapAuHi] & \PaShapPs & \PaShapPg{} [\PaShapPgLo,\PaShapPgHi]\\
+Grad.$\times$input & \PaGradAu{} [\PaGradAuLo,\PaGradAuHi] & \PaGradPs & \PaGradPg{} [\PaGradPgLo,\PaGradPgHi]\\
+Attention        & \textbf{\PaAttnAu} [\PaAttnAuLo,\PaAttnAuHi] & \textbf{\PaAttnPs} & \PaAttnPg{} [\PaAttnPgLo,\PaAttnPgHi]\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\Figure[t!](topskip=0pt, botskip=0pt, midskip=0pt)[width=0.98\columnwidth]{fig_loc.pdf}
+{Localization AUPRC by explainer on the discriminating detector, with $95\%$ bootstrap CIs (values of Table~\ref{tab:loc}). All beat chance (dashed); attention leads on span overlap.\label{fig:loc}}
+
+\subsection{Faithful, Localized, and Why Both Are Needed}
+
+Table~\ref{tab:faith} shows why an above-chance localization score cannot be read on its own. On the discriminating detector, occlusion and attention are both highly faithful (comprehensiveness $\PaOccCo$ and $\PaAttnCo$: removing their top words drives the injection probability to near zero). Occlusion is slightly more faithful ($p\PCoOccAttn$), but attention localizes the span better, so a defender who wants faithful \emph{and} well-covered evidence should combine attention's overlap with occlusion's pinpointing. On \texttt{deepset-deberta} and \texttt{fmops-distilbert}, by contrast, comprehensiveness is $\approx 0$ for every explainer, even though several of their explanations still localize above chance (Appendix): because the probability is saturated near $1$, no small set of words drives the verdict, and the ``localization'' is an artifact of the attribution method, not evidence that the detector reasons about the span. Localization and faithfulness are therefore distinct, and both are required. Fig.~\ref{fig:dist} shows the per-item spread behind these means.
+
+\begin{table}[t]
+\centering
+\caption{Faithfulness on \texttt{protectai-deberta-v2} ($n=50$; comprehensiveness with $95\%$ CI). On the two over-flagging detectors comprehensiveness is $\approx 0$ (probability saturated); see the Appendix.}
+\label{tab:faith}
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}lcc@{}}
+\toprule
+Explainer & Comprehensiveness$\uparrow$ (CI) & Retained prob.\ (top-20\%)$\uparrow$\\
+\midrule
+Occlusion        & \PaOccCo{} [\PaOccCoLo,\PaOccCoHi] & \PaOccRe\\
+KernelSHAP       & \PaShapCo{} [\PaShapCoLo,\PaShapCoHi] & \PaShapRe\\
+Grad.$\times$input & \PaGradCo{} [\PaGradCoLo,\PaGradCoHi] & \PaGradRe\\
+Attention        & \PaAttnCo{} [\PaAttnCoLo,\PaAttnCoHi] & \PaAttnRe\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\Figure[t!](topskip=0pt, botskip=0pt, midskip=0pt)[width=0.98\columnwidth]{fig_dist.pdf}
+{Per-item localization AUPRC (left) and comprehensiveness (right) on \texttt{protectai-deberta-v2} ($n=50$; one point per injection, bar = mean, dashed = chance).\label{fig:dist}}
+
+\section{The Dual Use of Word Importance}
+\label{sec:dualuse}
+
+\paragraph*{Defensive use: explanation-guided sanitization (measured)}
+We run sanitization end to end on \texttt{protectai-\allowbreak deberta-v2}: for each caught injection we rank words by an explainer, delete the top-$k\%$, and \emph{re-query the detector} on the cleaned document. Table~\ref{tab:sanit} reports, for $k\in\{10,20\}$, the resulting injection probability, its drop, the fraction of the injected span removed, and the benign collateral. Removing the top-$20\%$ attention-ranked words lowers the mean injection probability from $\SanAttnTwentyPb$ to $\SanAttnTwentyPa$, excising $\SanAttnTwentySpPct\%$ of the injected span while deleting $\SanAttnTwentyCoPct\%$ of benign words; occlusion at $20\%$ reaches a probability of $\SanOccTwentyPa$ at $\SanOccTwentyCoPct\%$ collateral. At $k{=}10\%$ the collateral falls to $\SanOccTenCoPct\%$ (occlusion) and $\SanAttnTenCoPct\%$ (attention); occlusion still drives the probability to $\SanOccTenPa$, while attention leaves it at $\SanAttnTenPa$. Sanitization is thus effective but not free, and its quality presupposes the faithful regime of Section~\ref{sec:results}: on the saturated detectors, where comprehensiveness is $\approx 0$, no word removal moves the verdict, matching the fact that those detectors are not usable gates in the first place.
+
+\begin{table}[t]
+\centering
+\caption{Explanation-guided sanitization on \texttt{protectai-deberta-v2} ($n=50$): delete the top-$k\%$ words by importance and re-query. Mean $P(\textsc{inj})$ before removal is $\SanOccTenPb$.}
+\label{tab:sanit}
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{@{}llcccc@{}}
+\toprule
+Explainer & $k$ & $P(\textsc{inj})$ after & Drop & Span removed & Collateral\\
+\midrule
+Occlusion & 10\% & \SanOccTenPa & \SanOccTenDr & \SanOccTenSp & \SanOccTenCo\\
+Occlusion & 20\% & \SanOccTwentyPa & \SanOccTwentyDr & \SanOccTwentySp & \SanOccTwentyCo\\
+Attention & 10\% & \SanAttnTenPa & \SanAttnTenDr & \SanAttnTenSp & \SanAttnTenCo\\
+Attention & 20\% & \SanAttnTwentyPa & \SanAttnTwentyDr & \SanAttnTwentySp & \SanAttnTwentyCo\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph*{Offensive use: the shortcut is editable}
+The mirror image is the risk that \emph{Decoding Guardrails} \cite{decodingguardrails} raises: an attacker reading the same importance vector knows which tokens carry the verdict and can rewrite them while preserving intent. Our contribution is to connect the two: a detector that localizes and is faithful exposes a \emph{specific} editable target, whereas the low recall of \texttt{protectai} in the embedded setting (Table~\ref{tab:detect}) means that many injections never trigger it at all. Transparency and robustness trade off, and the trade-off is measurable on \textsc{PI-Loc}.
+
+\paragraph*{Remark}
+A guardrail's ROC-AUC on standalone prompts predicts neither its recall on embedded injections nor whether its explanations point at them. Both must be measured before deployment behind an agent.
+
+\section{Discussion and Recommendations}
+\label{sec:disc}
+
+\paragraph*{Report embedded recall and localization next to ROC-AUC}
+For any guardrail proposed to protect an agent, we recommend reporting (i) recall on injections embedded in benign carriers and (ii) a localization score on a span-annotated benchmark such as \textsc{PI-Loc}, alongside detection accuracy. A detector that cannot be shown to look at the injection should not be trusted to explain itself.
+
+\paragraph*{Choose the explainer for the use}
+Occlusion pinpoints the injection and is the most faithful explainer here (favor it for token-level audit and for low-collateral sanitization at small $k$); attention gives the best region overlap and removes the largest share of the span at $k{=}20\%$ (favor it for analyst highlighting), but its single peak is often off-span and should not be used to select one token. KernelSHAP and gradient$\times$input were weaker on both axes.
+
+\paragraph*{Faithfulness gates localization}
+An above-chance localization number on a detector whose probability is saturated is an artifact. Localization should be read only together with a faithfulness check. This also applies to localization methods that query a detector as an oracle \cite{promptlocate2026}: their evidence is only as good as the detector's sensitivity to the removed text.
+
+\paragraph*{Limitations}
+The audit uses three open encoder classifiers, four explainers, and $n=50$ matched items from a single benchmark draw; we mitigate the sample size with bootstrap and Wilson intervals and paired tests, but larger $n$, several benchmark draws, newer guardrails such as Prompt~Guard~2, and closed or generative judge-style guardrails are future work. KernelSHAP is sensitive to its coalition budget, and a larger budget may improve it. \textsc{PI-Loc} payloads are reused from two English corpora and spliced at sentence boundaries; multilingual, obfuscated, and natural (non-spliced) injections remain open, as does calibrating a detector's operating threshold on embedded rather than standalone data. We do not compare against dedicated localization methods \cite{promptlocate2026,attnlocate2026}, which solve a different task; using them as additional explainers of a guardrail verdict is a natural extension.
+
+\section{Conclusion}
+\label{sec:conc}
+
+We asked whether prompt-injection detectors look at the injection, and built the span-annotated benchmark needed to answer it. Across three open guardrails and four explainers we found that headline ROC-AUC hides two failures: popular detectors either miss about half of embedded injections or flag almost every document, and explanation quality splits into two distinct, separately significant axes. Attention best covers the injected span while occlusion best pinpoints it, both faithful, whereas an above-chance localization score is meaningless on a detector whose decisions no small word set drives. The same importance signal that enables measured document sanitization on a sound detector also exposes the shortcut an attacker can edit. Trustworthy guardrails for LLM agents should therefore be evaluated on \emph{where} they look and on \emph{whether they still fire} once the injection is embedded, not only on how often they are right on standalone prompts.
+
+\appendices
+\section{Per-Detector Localization and Faithfulness (Matched Items)}
+\label{app:breakdown}
+Table~\ref{tab:app} gives the full breakdown over all three detectors and four explainers, all scored on the \emph{same} 50 injections (a seeded sample of those caught by \texttt{protectai}). On the two over-flagging detectors (deepset, fmops), comprehensiveness is $\approx 0$: no small word set drives the (saturated) verdict, so their above-chance localization AUPRC must not be read as evidence of span-aware reasoning. This is why the main-text localization and faithfulness tables are reported on the discriminating detector; the comparison here is what licenses that choice.
+
+\begin{table}[h]
+\centering
+\caption{Full audit on the matched item set ($n=50$). Loc.\ = localization AUPRC (chance $\PaChance$); PG = pointing game; Comp.\ = comprehensiveness.}
+\label{tab:app}
+\begin{tabular}{@{}llccc@{}}
+\toprule
+Detector & Explainer & Loc. & PG & Comp.\\
+\midrule
+\multirow{4}{*}{protectai-deberta-v2}
+ & Occlusion & \PaOccAu & \PaOccPg & \PaOccCo\\
+ & KernelSHAP & \PaShapAu & \PaShapPg & \PaShapCo\\
+ & Grad.$\times$input & \PaGradAu & \PaGradPg & \PaGradCo\\
+ & Attention & \PaAttnAu & \PaAttnPg & \PaAttnCo\\
+\midrule
+\multirow{4}{*}{deepset-deberta}
+ & Occlusion & \DsOccAu & \DsOccPg & \DsOccCo\\
+ & KernelSHAP & \DsShapAu & \DsShapPg & \DsShapCo\\
+ & Grad.$\times$input & \DsGradAu & \DsGradPg & \DsGradCo\\
+ & Attention & \DsAttnAu & \DsAttnPg & \DsAttnCo\\
+\midrule
+\multirow{4}{*}{fmops-distilbert}
+ & Occlusion & \FmOccAu & \FmOccPg & \FmOccCo\\
+ & KernelSHAP & \FmShapAu & \FmShapPg & \FmShapCo\\
+ & Grad.$\times$input & \FmGradAu & \FmGradPg & \FmGradCo\\
+ & Attention & \FmAttnAu & \FmAttnPg & \FmAttnCo\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section*{Data and Code Availability}
+The \textsc{PI-Loc} generator, the full benchmark file, the audit harness, the statistics scripts, and the aggregate results are available at \url{https://github.com/yulliwasameur/pi-loc} and archived at \url{https://doi.org/10.5281/zenodo.24085151}. All attack payloads are reused verbatim from the cited public benchmarks \cite{deepsetpi,safeguardpi}; no new attack strings were authored.
+
+\section*{Acknowledgment}
+An AI assistant (Claude, Anthropic) was used extensively in this work. At the first author's request and under his direction, it wrote the code that builds \textsc{PI-Loc} and runs the audit, executed the experiments, and drafted the manuscript. Every number in the article is generated from the released result files by a script, not typed by hand. Y.~Ameur initiated the study and reviewed the design, code, results, and text; S.~Bouzefrane critically reviewed the study and the manuscript. Both authors approved the final version and take full responsibility for its content.
+
+\bibliographystyle{IEEEtran}
+\bibliography{refs}
+
+\begin{IEEEbiography}[{\includegraphics[width=1in,height=1.25in,clip,keepaspectratio]{ameur.jpg}}]{Yulliwas Ameur}
+received the Ph.D.\ degree in computer science from the Conservatoire National des Arts et M\'etiers (Cnam), Paris, France, in 2023. He is a permanent Lecturer-Researcher in cybersecurity with the Efrei Research Lab, Efrei Paris, Universit\'e Paris-Panth\'eon-Assas, Villejuif, France, and an associate member of the CEDRIC Laboratory, Cnam. His research interests include the security of AI agents, prompt injection, privacy-preserving computation with homomorphic encryption, and post-quantum cryptography.
+\end{IEEEbiography}
+
+\begin{IEEEbiography}[{\includegraphics[width=1in,height=1.25in,clip,keepaspectratio]{bouzefrane.png}}]{Samia Bouzefrane}
+is a Full Professor at the Conservatoire National des Arts et M\'etiers (Cnam), Paris, France, where she heads the CEDRIC Laboratory and is a member of its Networks and Connected Objects team. Her research interests include cybersecurity and smart-card systems.
+\end{IEEEbiography}
+
+\EOD
+
+\end{document}

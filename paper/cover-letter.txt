@@ -1,0 +1,25 @@
+Dear Editor,
+
+Please find enclosed the manuscript "Do Prompt-Injection Detectors Look at the Injection? A Localization-Faithful Explainability Audit of Agent Guardrails", which we submit for consideration as a regular paper in IEEE Access.
+
+Classifier guardrails are the first defence placed in front of large language model agents, and their verdicts are increasingly explained to analysts with explainable-AI methods. This paper asks whether those explanations point at the injected instruction, and whether the detectors still work when the injection is hidden inside a benign document, as it is in agentic use.
+
+The main contributions are:
+- PI-Loc, a benchmark of 820 documents with exact injection spans, hard negatives and clean carriers, built only from public attack strings;
+- evidence that three widely used open detectors either miss about half of embedded injections or flag almost everything, even at a calibrated false-positive rate;
+- a two-axis audit (localization and faithfulness) of four explainers, with bootstrap confidence intervals and paired tests;
+- a measured explanation-guided sanitization experiment that quantifies the transparency/robustness trade-off.
+
+The paper is positioned against recent localization methods (PromptLocate, IEEE S&P 2026; AttnLocate, 2026) and a concurrent study of guardrail saliency (Decoding Guardrails, 2026). These works localize injected text or evade a single guardrail; none audits whether the guardrail's own explanation is localized and faithful.
+
+The work fits the scope of IEEE Access in security and trustworthy artificial intelligence. The manuscript is original, has not been published, and is not under consideration elsewhere. Code and data are released at https://github.com/yulliwasameur/pi-loc and archived at https://doi.org/10.5281/zenodo.24085151. An AI assistant was used for parts of the code and the editing of the text, as disclosed in the Acknowledgment.
+
+Co-author: Samia Bouzefrane, Professor, CEDRIC Laboratory, Cnam, Paris, France (ORCID 0000-0002-0979-1289). Both authors have approved the manuscript and its submission. The authors declare no competing interests and received no specific funding.
+
+Thank you for your consideration.
+
+Sincerely,
+Yulliwas Ameur (corresponding author), on behalf of both authors
+Lecturer-Researcher, Efrei Research Lab, Efrei Paris - Université Paris-Panthéon-Assas, Villejuif, France
+Associate member, CEDRIC Laboratory, Cnam, Paris, France
+yulliwas.ameur@efrei.fr - ORCID 0000-0003-1435-2982
