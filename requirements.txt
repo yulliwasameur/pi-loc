@@ -1,0 +1,13 @@
+# Exact versions used to produce the published results (Python 3.13, CPU only).
+# torch: install the CPU wheel, e.g. pip install torch==2.15.0 --index-url https://download.pytorch.org/whl/cpu
+torch==2.15.0
+transformers==4.46.3
+datasets==3.1.0
+scikit-learn==1.9.1
+scipy==1.18.1
+numpy==2.5.3
+matplotlib==3.11.2
+langdetect==1.0.9
+sentencepiece==0.2.3
+protobuf==7.36.1
+pytest

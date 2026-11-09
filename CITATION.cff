@@ -1,0 +1,26 @@
+cff-version: 1.2.0
+message: "If you use PI-Loc or this audit harness, please cite the paper below."
+title: "PI-Loc: span-annotated benchmark and explainability audit harness for prompt-injection guardrails"
+authors:
+  - family-names: Ameur
+    given-names: Yulliwas
+    orcid: "https://orcid.org/0000-0003-1435-2982"
+    affiliation: "Efrei Research Lab, Université Paris-Panthéon-Assas; CEDRIC, Cnam"
+version: 1.0.0
+date-released: 2026-11-09
+doi: 10.5281/zenodo.24085151
+license: MIT
+repository-code: "https://github.com/yulliwasameur/pi-loc"
+keywords: [prompt injection, guardrails, explainable AI, LLM agents, benchmark]
+preferred-citation:
+  type: article
+  title: "Do Prompt-Injection Detectors Look at the Injection? A Localization-Faithful Explainability Audit of Agent Guardrails"
+  authors:
+    - family-names: Ameur
+      given-names: Yulliwas
+      orcid: "https://orcid.org/0000-0003-1435-2982"
+    - family-names: Bouzefrane
+      given-names: Samia
+      orcid: "https://orcid.org/0000-0002-0979-1289"
+  year: 2026
+  status: submitted

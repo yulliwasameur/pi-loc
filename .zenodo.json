@@ -1,0 +1,12 @@
+{
+  "title": "PI-Loc: span-annotated benchmark and explainability audit harness for prompt-injection guardrails",
+  "upload_type": "software",
+  "description": "Code, benchmark manifest, generated benchmark, raw results, statistics and figures for the paper 'Do Prompt-Injection Detectors Look at the Injection? A Localization-Faithful Explainability Audit of Agent Guardrails'. Run run_all.sh to rebuild PI-Loc from pinned public datasets and reproduce every number and figure.",
+  "creators": [{"name": "Ameur, Yulliwas", "affiliation": "Efrei Research Lab, Université Paris-Panthéon-Assas; CEDRIC, Cnam", "orcid": "0000-0003-1435-2982"}],
+  "keywords": ["prompt injection", "guardrails", "explainable AI", "LLM agents", "benchmark", "faithfulness"],
+  "license": "MIT",
+  "access_right": "open",
+  "version": "1.0.0",
+  "language": "eng",
+  "notes": "Code: MIT. Results, figures and documentation: CC BY 4.0. data/piloc.jsonl contains text from third-party datasets under their own licenses; see DATA_CARD.md."
+}

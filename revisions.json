@@ -1,0 +1,9 @@
+{
+ "protectai/deberta-v3-base-prompt-injection-v2": "90c9989b1a342275dd0d1a95aad283c04e075671",
+ "deepset/deberta-v3-base-injection": "80dda00d0b0d9a03917a7685e2ddbcd28e04dbb1",
+ "fmops/distilbert-prompt-injection": "c5da1fefd33c98c447b50dd806fe86aeb9e8c26c",
+ "deepset/prompt-injections": "4f61ecb038e9c3fb77e21034b22511b523772cdd",
+ "xTRam1/safe-guard-prompt-injection": "a3a877d608f37b7d20d9945671902df895ecdb46",
+ "rajpurkar/squad": "7b6d24c440a36b6815f21b70d25016731768db1f",
+ "Yale-LILY/aeslc": "2305f2e63b68056f9b9037a3805c8c196e0d5581"
+}
